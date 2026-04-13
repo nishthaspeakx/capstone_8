@@ -2,8 +2,10 @@
 Lowe's Store-Level Sales Target Model — Streamlit Demo App
 Capstone 8 | IIM Calcutta | APAL02
 
-Loads pre-computed model results from outputs/ and renders an
-interactive dashboard mirroring the HTML prototype.
+Two modes:
+  1. Pre-computed: Loads saved results from outputs/ (instant demo)
+  2. Upload & Score: User uploads new CSV → feature engineering →
+     score with saved XGBoost model → store accuracy loop → live results
 """
 
 import streamlit as st
@@ -13,19 +15,24 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pickle
 import os
+import sys
 
 # ─── Page config ──────────────────────────────────────────────
 st.set_page_config(
     page_title="Lowe's Store-Level Sales Target Model",
     page_icon="🏪",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # ─── Paths ────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUTS_DIR = os.path.join(BASE_DIR, "outputs")
-DATA_DIR = os.path.join(BASE_DIR, "data")
+SRC_DIR = os.path.join(BASE_DIR, "src")
+
+# Add src/ to path so we can import feature_engineering
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
 
 # ─── Custom CSS (Lowe's blue theme) ──────────────────────────
 st.markdown("""
@@ -38,9 +45,6 @@ st.markdown("""
                    font-size: 12px; padding: 3px 10px; border-radius: 4px; margin: 3px; }
     .feature-tag.engineered { background: #e8f5e9; color: #2e7d32; }
     .feature-tag.reserve { background: #fff8e1; color: #f57f17; }
-    .badge-under { background: #fff3e0; color: #e65100; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-    .badge-over { background: #fce4ec; color: #c62828; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-    .badge-ok { background: #e8f5e9; color: #2e7d32; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -56,28 +60,64 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# ─── Load pre-computed results ────────────────────────────────
+# ═══════════════════════════════════════════════════════════════
+# SIDEBAR: Data Source Selection + Upload
+# ═══════════════════════════════════════════════════════════════
+with st.sidebar:
+    st.markdown("## 📂 Data Source")
+    data_mode = st.radio(
+        "Choose data source",
+        ["Pre-computed Results (Demo)", "Upload New CSV"],
+        help="Demo mode loads saved results instantly. Upload mode scores new data with the trained model.",
+    )
+
+    uploaded_file = None
+    if data_mode == "Upload New CSV":
+        st.markdown("---")
+        st.markdown("### Upload Dataset")
+        st.markdown(
+            "Upload a CSV with the same format as the training data "
+            "(Store ID, Year, Fiscal Week, Actual Sales USD, and all demographic/competition columns)."
+        )
+        uploaded_file = st.file_uploader(
+            "Drop CSV here",
+            type=["csv"],
+            help="Expected: store-week rows with 194 columns",
+        )
+        if uploaded_file:
+            st.success(f"Uploaded: {uploaded_file.name}")
+        else:
+            st.info("Waiting for CSV upload...")
+
+    st.markdown("---")
+    st.markdown("### About")
+    st.caption(
+        "Capstone 8 · Group 8 · IIM Calcutta APAL02\n\n"
+        "ML-powered store sales targeting to replace the "
+        "'peanut butter spread' approach with a data-driven model."
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# DATA LOADING — Either pre-computed or live upload
+# ═══════════════════════════════════════════════════════════════
+
 @st.cache_data
-def load_results():
+def load_precomputed():
     """Load all pre-computed model outputs."""
     data = {}
-
-    # Model comparison
     comp_path = os.path.join(OUTPUTS_DIR, "model_comparison.csv")
     if os.path.exists(comp_path):
         data["comparison"] = pd.read_csv(comp_path, index_col=0)
 
-    # Feature importance
     imp_path = os.path.join(OUTPUTS_DIR, "feature_importance.csv")
     if os.path.exists(imp_path):
         data["importance"] = pd.read_csv(imp_path)
 
-    # Store accuracy loop
     loop_path = os.path.join(OUTPUTS_DIR, "store_accuracy_loop_results.csv")
     if os.path.exists(loop_path):
         data["store_loop"] = pd.read_csv(loop_path)
 
-    # Model pickle (for metadata)
     pkl_path = os.path.join(OUTPUTS_DIR, "model_xgboost.pkl")
     if os.path.exists(pkl_path):
         with open(pkl_path, "rb") as f:
@@ -86,10 +126,122 @@ def load_results():
     return data
 
 
-results = load_results()
+@st.cache_resource
+def load_model():
+    """Load the saved XGBoost model for scoring new data."""
+    pkl_path = os.path.join(OUTPUTS_DIR, "model_xgboost.pkl")
+    if os.path.exists(pkl_path):
+        with open(pkl_path, "rb") as f:
+            return pickle.load(f)
+    return None
+
+
+def score_uploaded_csv(uploaded_file):
+    """
+    Run the full scoring pipeline on uploaded CSV:
+    1. Load CSV
+    2. Feature engineering (lag/rolling, income mix, housing age, competitors, encoding)
+    3. Score with saved XGBoost model
+    4. Run store-level accuracy loop
+    5. Return results dict matching the pre-computed format
+    """
+    from feature_engineering import build_phase1_features, PHASE1_FEATURES, TARGET
+    from store_accuracy_loop import run_store_accuracy_loop, assign_role_of_store
+
+    # Load model
+    model_artifact = load_model()
+    if model_artifact is None:
+        st.error("No trained model found in outputs/. Cannot score new data.")
+        return None
+
+    model = model_artifact["model"]
+    model_features = model_artifact["features"]
+
+    # Load and validate CSV
+    df = pd.read_csv(uploaded_file)
+    df.columns = df.columns.str.strip()
+    df[TARGET] = pd.to_numeric(df[TARGET], errors='coerce')
+
+    raw_rows = len(df)
+    raw_stores = df["Store ID"].nunique()
+    raw_years = sorted(df["Year"].unique())
+
+    # Remove zero-sales and missing-target rows
+    df = df[df[TARGET] > 0].copy()
+
+    # Feature engineering
+    df = build_phase1_features(df, verbose=False)
+
+    # Prepare feature matrix
+    available = [f for f in model_features if f in df.columns]
+    missing_feats = [f for f in model_features if f not in df.columns]
+
+    # Drop NaN rows (from lag features)
+    clean = df.dropna(subset=available + [TARGET]).copy()
+
+    X = clean[available].apply(pd.to_numeric, errors="coerce").fillna(0)
+    y_actual = clean[TARGET]
+
+    # Score
+    clean["predicted"] = model.predict(X)
+
+    # Evaluate globally
+    wape = np.abs(y_actual.values - clean["predicted"].values).sum() / y_actual.values.sum() * 100
+    bias = (clean["predicted"].sum() - y_actual.values.sum()) / y_actual.values.sum() * 100
+    rmse = np.sqrt(np.mean((y_actual.values - clean["predicted"].values) ** 2))
+    mae = np.mean(np.abs(y_actual.values - clean["predicted"].values))
+    r2 = 1 - np.sum((y_actual.values - clean["predicted"].values) ** 2) / np.sum(
+        (y_actual.values - y_actual.values.mean()) ** 2
+    )
+
+    comparison = pd.DataFrame(
+        {"WAPE": [wape], "Bias": [bias], "RMSE": [rmse], "MAE": [mae], "R2": [r2]},
+        index=["XGBoost (Upload)"],
+    )
+
+    # Feature importance from saved model
+    if hasattr(model, "feature_importances_"):
+        imp = pd.Series(model.feature_importances_, index=model_features)
+        imp_pct = (imp / imp.sum() * 100).sort_values(ascending=False)
+        importance = pd.DataFrame({"Feature": imp_pct.index, "Importance_pct": imp_pct.values})
+    else:
+        importance = pd.DataFrame()
+
+    # Store accuracy loop
+    loop_df = run_store_accuracy_loop(clean, verbose=False)
+    loop_df = assign_role_of_store(loop_df, clean, verbose=False)
+
+    return {
+        "comparison": comparison,
+        "importance": importance,
+        "store_loop": loop_df,
+        "model_artifact": model_artifact,
+        "upload_meta": {
+            "raw_rows": raw_rows,
+            "raw_stores": raw_stores,
+            "raw_years": raw_years,
+            "clean_rows": len(clean),
+            "features_used": len(available),
+            "features_missing": missing_feats,
+        },
+    }
+
+
+# ─── Determine which results to use ──────────────────────────
+if data_mode == "Upload New CSV" and uploaded_file is not None:
+    with st.spinner("Scoring uploaded data with trained XGBoost model..."):
+        results = score_uploaded_csv(uploaded_file)
+    if results is None:
+        st.stop()
+    is_upload = True
+    upload_meta = results.get("upload_meta", {})
+else:
+    results = load_precomputed()
+    is_upload = False
+    upload_meta = {}
 
 if not results:
-    st.error("No pre-computed results found in outputs/. Run `python src/train_model.py` first.")
+    st.error("No results available. Either load pre-computed outputs or upload a CSV.")
     st.stop()
 
 
@@ -98,22 +250,34 @@ if not results:
 # ═══════════════════════════════════════════════════════════════
 st.markdown("### 📂 Dataset Summary")
 
-c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("Total Rows", "269,412")
-c2.metric("Stores", "1,727")
-c3.metric("Fiscal Years", "2023–2025")
-c4.metric("Columns", "194")
-c5.metric("Phase 1 Features", "35")
+if is_upload:
+    meta = upload_meta
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Rows Uploaded", f"{meta['raw_rows']:,}")
+    c2.metric("Stores", f"{meta['raw_stores']:,}")
+    c3.metric("Fiscal Years", ", ".join(str(y) for y in meta['raw_years']))
+    c4.metric("Rows Scored", f"{meta['clean_rows']:,}")
+    c5.metric("Features Used", f"{meta['features_used']}")
 
-# Validation details
+    if meta["features_missing"]:
+        st.warning(f"⚠️ {len(meta['features_missing'])} model features not found in uploaded data: {meta['features_missing'][:5]}...")
+
+    st.success("✅ Upload scored successfully with saved XGBoost model!")
+else:
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Total Rows", "269,412")
+    c2.metric("Stores", "1,727")
+    c3.metric("Fiscal Years", "2023–2025")
+    c4.metric("Columns", "194")
+    c5.metric("Phase 1 Features", "35")
+
 with st.expander("Dataset Validation Details"):
     st.markdown("""
     | Check | Result |
     |-------|--------|
-    | Rows | 269,412 (1,727 stores × 52 weeks × 3 years) |
-    | Missing target rows | 44,902 (16.7%) — removed before training |
-    | Zero-sales rows | 12 — excluded from training |
-    | After cleaning | 224,498 usable rows |
+    | Expected rows | 269,412 (1,727 stores × 52 weeks × 3 years) |
+    | Missing target rows | 44,902 (16.7%) — removed before scoring |
+    | Zero-sales rows | 12 — excluded |
     | Leakage blacklist | Plan Sales USD (corr=0.986), Invoice Count (corr=0.973), Avg Ticket (corr=0.126) — all excluded |
     """)
 
@@ -238,7 +402,7 @@ if "comparison" in results:
     # Top metrics
     m1, m2, m3, m4, m5, m6 = st.columns(6)
     m1.metric("Best Model", best_model)
-    m2.metric("WAPE", f"{best['WAPE']:.2f}%", delta=f"vs naive {comp.loc['Naive (lag-52)', 'WAPE']:.1f}%", delta_color="inverse")
+    m2.metric("WAPE", f"{best['WAPE']:.2f}%")
     m3.metric("Bias", f"{best['Bias']:+.2f}%")
     m4.metric("RMSE", f"${best['RMSE']:,.0f}")
     m5.metric("R²", f"{best['R2']:.4f}")
@@ -250,8 +414,11 @@ if "comparison" in results:
         "WAPE < 8%": best["WAPE"] < 8,
         "Bias within ±2%": abs(best["Bias"]) < 2,
         "R² > 0.88": best["R2"] > 0.88,
-        "Beat naive baseline (lag-52 WAPE)": best["WAPE"] < comp.loc["Naive (lag-52)", "WAPE"],
     }
+    # Add naive comparison only if available
+    if "Naive (lag-52)" in comp.index:
+        criteria["Beat naive baseline (lag-52 WAPE)"] = best["WAPE"] < comp.loc["Naive (lag-52)", "WAPE"]
+
     for criterion, passed in criteria.items():
         icon = "✅" if passed else "⚠️"
         st.markdown(f"{icon} **{criterion}**")
@@ -280,10 +447,10 @@ st.markdown("### 🏪 Store-Level Accuracy Loop & Feature Importance")
 
 col_left, col_right = st.columns([3, 2])
 
-with col_left:
-    if "store_loop" in results:
-        loop = results["store_loop"]
+loop = results.get("store_loop", pd.DataFrame())
 
+with col_left:
+    if len(loop) > 0:
         # Summary stats
         s1, s2, s3, s4 = st.columns(4)
         n_under = (loop["target_status"] == "Under-Targeted").sum()
@@ -326,7 +493,7 @@ with col_left:
 
 with col_right:
     st.markdown("#### 🔑 Top Feature Importances")
-    if "importance" in results:
+    if "importance" in results and len(results["importance"]) > 0:
         imp = results["importance"].head(15)
         fig = px.bar(
             imp,
@@ -351,7 +518,7 @@ with col_right:
 # ═══════════════════════════════════════════════════════════════
 # SECTION 6: Store Bias Distribution
 # ═══════════════════════════════════════════════════════════════
-if "store_loop" in results:
+if len(loop) > 0:
     st.markdown("### 📊 Store Bias Distribution")
 
     col_chart1, col_chart2 = st.columns(2)
@@ -381,7 +548,6 @@ if "store_loop" in results:
             title="Predicted vs Actual (Store-Level Totals)",
             hover_data=["Store ID", "Store Name", "WAPE_pct"],
         )
-        # Add perfect prediction line
         max_val = max(loop["Actual_Total"].max(), loop["Predicted_Total"].max())
         fig_scatter.add_trace(go.Scatter(
             x=[0, max_val], y=[0, max_val],
@@ -395,7 +561,7 @@ if "store_loop" in results:
 # ═══════════════════════════════════════════════════════════════
 # SECTION 7: Role of Store Segmentation
 # ═══════════════════════════════════════════════════════════════
-if "store_loop" in results and "role_of_store" in loop.columns:
+if len(loop) > 0 and "role_of_store" in loop.columns:
     st.markdown("### 🏷️ Role-of-Store Segmentation")
 
     role_counts = loop["role_of_store"].value_counts()
@@ -436,17 +602,18 @@ if "store_loop" in results and "role_of_store" in loop.columns:
             use_container_width=True,
         )
 
-    st.caption("""
-    **Segmentation Logic:** Combines model bias, CAGR HH (2010-2020), housing_new_share, and total_competitor_ta.
-    High Growth = strong demand signals + model under-predicts (store outperforms).
-    Defend = high competition + model over-predicts (store underperforms).
-    """)
+    st.caption(
+        "**Segmentation Logic:** Combines model bias, CAGR HH (2010-2020), housing_new_share, and total_competitor_ta. "
+        "High Growth = strong demand signals + model under-predicts (store outperforms). "
+        "Defend = high competition + model over-predicts (store underperforms)."
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
 # SECTION 8: AI Commentary (Gemini)
 # ═══════════════════════════════════════════════════════════════
 st.markdown("### 🤖 AI Commentary (Gemini Analysis)")
+
 
 def get_ai_commentary():
     """Generate AI commentary using Gemini API."""
@@ -467,21 +634,24 @@ def get_ai_commentary():
 
         comp = results.get("comparison", pd.DataFrame())
         best_row = comp.loc[comp["WAPE"].idxmin()] if len(comp) > 0 else {}
-        loop = results.get("store_loop", pd.DataFrame())
-        imp = results.get("importance", pd.DataFrame())
+        loop_data = results.get("store_loop", pd.DataFrame())
+        imp_data = results.get("importance", pd.DataFrame())
+
+        source_label = "uploaded dataset" if is_upload else "pre-computed holdout"
 
         prompt = f"""You are a senior retail analytics expert reviewing a machine learning model for store-level sales target setting at a home improvement retailer (similar to Lowe's).
 
 Model Details:
+- Data source: {source_label}
 - Algorithm: XGBoost (best performing)
 - Phase 1 Feature Set: 35 features (calendar, lag sales, store structure, demographics, housing, competition)
 - Overall WAPE: {best_row.get('WAPE', 'N/A'):.2f}%
 - Bias: {best_row.get('Bias', 'N/A'):+.2f}%
 - R²: {best_row.get('R2', 'N/A'):.4f}
-- Top feature: {imp.iloc[0]['Feature'] if len(imp) > 0 else 'lag_1'} ({imp.iloc[0]['Importance_pct']:.1f}%)
-- Under-targeted stores: {(loop['target_status'] == 'Under-Targeted').sum() if len(loop) > 0 else 'N/A'}
-- Over-targeted stores: {(loop['target_status'] == 'Over-Targeted').sum() if len(loop) > 0 else 'N/A'}
-- Well-calibrated stores: {(loop['target_status'] == 'Well-Calibrated').sum() if len(loop) > 0 else 'N/A'}
+- Top feature: {imp_data.iloc[0]['Feature'] if len(imp_data) > 0 else 'lag_1'} ({imp_data.iloc[0]['Importance_pct']:.1f}%)
+- Under-targeted stores: {(loop_data['target_status'] == 'Under-Targeted').sum() if len(loop_data) > 0 else 'N/A'}
+- Over-targeted stores: {(loop_data['target_status'] == 'Over-Targeted').sum() if len(loop_data) > 0 else 'N/A'}
+- Well-calibrated stores: {(loop_data['target_status'] == 'Well-Calibrated').sum() if len(loop_data) > 0 else 'N/A'}
 
 Please provide:
 1. A 2-sentence interpretation of the WAPE and Bias from a planning standpoint
@@ -511,7 +681,7 @@ else:
 # ═══════════════════════════════════════════════════════════════
 # SECTION 9: Store Drill-Down
 # ═══════════════════════════════════════════════════════════════
-if "store_loop" in results:
+if len(loop) > 0:
     st.markdown("### 🔍 Store Drill-Down")
 
     store_options = loop["Store ID"].tolist()
@@ -543,6 +713,32 @@ if "store_loop" in results:
             )
             fig_q.update_layout(height=280, margin=dict(t=40, b=20), coloraxis_showscale=False)
             st.plotly_chart(fig_q, use_container_width=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+# SECTION 10: Download Results
+# ═══════════════════════════════════════════════════════════════
+if len(loop) > 0:
+    st.markdown("### 📥 Download Results")
+
+    dl1, dl2 = st.columns(2)
+    with dl1:
+        csv_loop = loop.to_csv(index=False)
+        st.download_button(
+            label="Download Store Accuracy Loop (CSV)",
+            data=csv_loop,
+            file_name="store_accuracy_loop_results.csv",
+            mime="text/csv",
+        )
+    with dl2:
+        if "importance" in results and len(results["importance"]) > 0:
+            csv_imp = results["importance"].to_csv(index=False)
+            st.download_button(
+                label="Download Feature Importance (CSV)",
+                data=csv_imp,
+                file_name="feature_importance.csv",
+                mime="text/csv",
+            )
 
 
 # ═══════════════════════════════════════════════════════════════
