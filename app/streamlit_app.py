@@ -20,7 +20,7 @@ st.set_page_config(
     page_title="Lowe's Store-Level Sales Target Model | Capstone 8",
     page_icon="🏪",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -162,11 +162,30 @@ def score_uploaded_csv(uploaded_file):
 
 # ─── Sidebar (optional upload) ────────────────────────────────
 with st.sidebar:
-    st.markdown("### 🔄 Live Scoring")
-    st.caption("Upload a new CSV (same format) to score it with the trained model.")
-    uploaded = st.file_uploader("Upload CSV", type=["csv"], label_visibility="collapsed")
+    st.markdown("## 📂 Data Source")
+    st.markdown(
+        "By default this dashboard shows the **demo dataset** "
+        "(269,412 store-weeks, FY2023–FY2025) scored with the trained 16-feature model."
+    )
     st.markdown("---")
-    st.caption("**Capstone 8 · Group 8**\nIIM Calcutta · APAL02")
+    st.markdown("### 🔄 Score a New File")
+    st.caption(
+        "Upload a fresh CSV in the **same format** (Store ID, Year, Fiscal Week, "
+        "Actual Sales USD + demographic/competition columns). The trained model "
+        "will score it live — no retraining needed."
+    )
+    uploaded = st.file_uploader("Upload CSV", type=["csv"], label_visibility="collapsed")
+
+    if uploaded is not None:
+        st.success(f"✅ Loaded: {uploaded.name}")
+        st.caption("Dashboard now showing **your uploaded data**.")
+        if st.button("← Back to demo dataset"):
+            st.rerun()
+    else:
+        st.info("Showing the **demo dataset**. Upload a file above to score new data.")
+
+    st.markdown("---")
+    st.caption("**Capstone 8 · Group 8**\n\nIIM Calcutta · APAL02")
 
 if uploaded is not None:
     with st.spinner("Scoring uploaded data with the trained 16-feature model…"):
@@ -203,6 +222,25 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+
+# ─── Data source banner ──────────────────────────────────────
+if is_upload:
+    m = results.get("upload_meta", {})
+    st.markdown(f"""
+    <div class="callout good">
+    📤 <b>Showing your uploaded data</b> &nbsp;·&nbsp; {m.get('raw_rows', 0):,} rows &nbsp;·&nbsp;
+    {m.get('raw_stores', 0):,} stores &nbsp;·&nbsp; {m.get('clean_rows', 0):,} rows scored &nbsp;·&nbsp;
+    Years: {', '.join(str(y) for y in m.get('raw_years', []))}
+    &nbsp; — switch back to the demo dataset from the sidebar.
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+    <div class="callout">
+    📊 <b>Showing the demo dataset</b> — 269,412 store-weeks across 1,727 stores (FY2023–FY2025).
+    Use the sidebar (left) to upload and score a new file.
+    </div>
+    """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════
 # 1. THE PROBLEM
@@ -446,57 +484,9 @@ if len(loop) > 0 and "role_of_store" in loop.columns:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 7. AI COMMENTARY
+# 7. METHODOLOGY (for Q&A)
 # ═══════════════════════════════════════════════════════════════
-st.markdown('<div class="section-h">7 &nbsp;·&nbsp; AI Executive Commentary</div>', unsafe_allow_html=True)
-st.markdown('<div class="section-sub">Gemini-generated business interpretation of the model results</div>', unsafe_allow_html=True)
-
-
-def get_ai_commentary():
-    try:
-        import google.generativeai as genai
-        key = None
-        if hasattr(st, "secrets") and "GEMINI_API_KEY" in st.secrets:
-            key = st.secrets["GEMINI_API_KEY"]
-        elif os.environ.get("GEMINI_API_KEY"):
-            key = os.environ["GEMINI_API_KEY"]
-        if not key:
-            return None
-        genai.configure(api_key=key)
-        m = genai.GenerativeModel("gemini-2.0-flash")
-        top_feat = imp.iloc[0]["Feature"] if len(imp) > 0 else "lag_1"
-        prompt = f"""You are a senior retail analytics partner presenting to executives at a home-improvement retailer (like Lowe's).
-
-Final model: XGBoost, 16 features. WAPE={best['WAPE']:.2f}%, Bias={best['Bias']:+.2f}%, R²={best['R2']:.3f}.
-Beats naive baseline by {(naive_wape-best['WAPE'])/naive_wape*100:.0f}%. Top feature: {top_feat}.
-Well-calibrated stores: {(loop['target_status']=='Well-Calibrated').sum() if len(loop)>0 else 'N/A'} of {len(loop) if len(loop)>0 else 'N/A'}.
-
-Give a crisp executive briefing in 4 short paragraphs:
-1. Bottom-line verdict on model readiness for planning use
-2. What the near-zero bias means for the annual plan reconciliation
-3. The strategic value of the store-level accuracy loop
-4. One clear recommendation for rollout
-Business language only, confident and concise."""
-        return m.generate_content(prompt).text
-    except Exception as e:
-        return f"*AI commentary unavailable: {e}*"
-
-
-if st.button("🤖 Generate Executive Commentary", type="primary"):
-    with st.spinner("Gemini is analyzing the results…"):
-        c = get_ai_commentary()
-        if c:
-            st.markdown(f'<div class="callout">{c}</div>', unsafe_allow_html=True)
-        else:
-            st.warning("Gemini API key not configured. Add `GEMINI_API_KEY` to Streamlit Secrets.")
-else:
-    st.info("Click to generate an AI executive briefing on the model results (powered by Gemini).")
-
-
-# ═══════════════════════════════════════════════════════════════
-# 8. METHODOLOGY (for Q&A)
-# ═══════════════════════════════════════════════════════════════
-st.markdown('<div class="section-h">8 &nbsp;·&nbsp; Methodology &amp; Integrity</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-h">7 &nbsp;·&nbsp; Methodology &amp; Integrity</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-sub">For the technical Q&A — how we kept the model honest</div>', unsafe_allow_html=True)
 
 mc1, mc2, mc3 = st.columns(3)
