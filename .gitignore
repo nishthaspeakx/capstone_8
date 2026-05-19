@@ -29,3 +29,8 @@ data/stores_sales_master_file_masked_final.csv
 
 # Secrets
 .streamlit/secrets.toml
+
+# Temp / lock / generated slide exports
+*.tmp
+.~lock.*#
+slide-*.jpg
