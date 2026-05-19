@@ -1,36 +1,17 @@
 Feature,Importance_pct
-lag_1,49.860985
-roll_4,43.76381
-lag_52,0.98268044
-Fiscal Week,0.5021746
-Wallflowers Depot Count in TradeArea,0.41019538
-roll_13,0.37403083
-Year,0.29955682
-CYE Average Mean Length of Residence Years,0.20824376
-income_affluent,0.18363489
-Garden Ctr Size,0.16266415
-income_low_share,0.16064627
-housing_new_share,0.1575473
-CYE Veteran Population,0.15541089
-lag_13,0.15419728
-housing_old_share,0.15236162
-Nut Cracker Tools Count in TradeArea,0.14701712
-CYE Median Year Housing Unit Built,0.1461658
-Sales Floor Size,0.14351425
-CYE Median Household Income,0.14260428
-Iggy Pop Hardware Count in TradeArea,0.13521184
-CYE Household Density HH SqMi,0.13385399
-CYE Total Population,0.13377446
-CYE Total Housing Units,0.13118649
-lag_4,0.12795874
-income_diy_core,0.124894366
-CYE Median Age Total Pop,0.12331
-Compound Annual HH Growth Rate 2010 2020,0.12241633
-total_competitor_ta,0.11813884
-CYE % Housing Units Owned,0.11767207
-Sister Store Count in TradeArea,0.116980165
-CYE Total Households,0.11375459
-Horn Ok Tools Count in TradeArea,0.11050138
-CBSA Type_enc,0.09858991
-Urbanicity_enc,0.09271642
-CBSA Metro Size_enc,0.09160089
+lag_1,62.21776
+lag_4,29.626114
+lag_52,3.1445503
+Wallflowers Depot Count in TradeArea,0.7003802
+lag_13,0.5525531
+housing_new_share,0.3950403
+CYE Total Population,0.38553762
+CYE Median Household Income,0.38143572
+CYE Total Housing Units,0.35955486
+income_affluent,0.35255986
+housing_old_share,0.34340584
+CYE Household Density HH SqMi,0.3380676
+Sister Store Count in TradeArea,0.33528915
+total_competitor_ta,0.33200645
+CYE Total Households,0.29178149
+Urbanicity_enc,0.2439661

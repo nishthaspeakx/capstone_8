@@ -14,33 +14,26 @@ from sklearn.preprocessing import LabelEncoder
 
 TARGET = 'Actual Sales USD'
 
-# Exact column names from the dataset (verified against 194-column master file)
+# ══════════════════════════════════════════════════════════════
+# FINAL 16 FEATURES — selected by criticality analysis
+# (down from 35 Phase-1 candidates → 16 high-criticality features)
+# roll_4, roll_13, Year, Fiscal Week intentionally dropped to
+# reduce lag dominance and improve model explainability.
+# ══════════════════════════════════════════════════════════════
 PHASE1_FEATURES = [
-    # Calendar (2)
-    'Year', 'Fiscal Week',
-    # Engineered lags (6)
-    'lag_1', 'lag_4', 'lag_13', 'lag_52', 'roll_4', 'roll_13',
-    # Store/market (5)
-    'Sales Floor Size', 'Garden Ctr Size',
-    'Urbanicity_enc', 'CBSA Type_enc', 'CBSA Metro Size_enc',
-    # Demand — raw (11)
+    # Engineered lags (4)
+    'lag_1', 'lag_4', 'lag_13', 'lag_52',
+    # Store/market (1)
+    'Urbanicity_enc',
+    # Demand — raw (5)
     'CYE Total Households', 'CYE Household Density HH SqMi',
     'CYE Median Household Income',
-    'Compound Annual HH Growth Rate 2010 2020',
-    'CYE Total Housing Units', 'CYE % Housing Units Owned',
-    'CYE Median Year Housing Unit Built',
-    'CYE Average Mean Length of Residence Years',
-    'CYE Total Population', 'CYE Median Age Total Pop',
-    'CYE Veteran Population',
-    # Demand — engineered (5)
-    'income_low_share', 'income_diy_core', 'income_affluent',
-    'housing_old_share', 'housing_new_share',
-    # Competition (6)
+    'CYE Total Housing Units', 'CYE Total Population',
+    # Demand — engineered (3)
+    'income_affluent', 'housing_old_share', 'housing_new_share',
+    # Competition (3)
     'Sister Store Count in TradeArea', 'total_competitor_ta',
-    'Nut Cracker Tools Count in TradeArea',
     'Wallflowers Depot Count in TradeArea',
-    'Iggy Pop Hardware Count in TradeArea',
-    'Horn Ok Tools Count in TradeArea',
 ]
 
 # Leakage blacklist — NEVER add these to PHASE1_FEATURES
