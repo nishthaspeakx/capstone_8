@@ -181,6 +181,55 @@ para("The simplest possible 'model': this week's sales = the same week last year
      "Any real model must beat this to justify its existence. Our final model is 15% better, "
      "which is the headline improvement story.")
 
+H2("2.5  The Logic Behind the Models — Mathematical Intuition")
+para("This section explains WHY these models work, in plain terms, for the technical Q&A.")
+
+H3("Supervised Regression — the core idea")
+para("We are learning a function f such that f(X) ≈ y, where X is the 16-feature vector for a "
+     "store-week and y is that week's Actual Sales USD. The model is given thousands of historical "
+     "(X, y) pairs and adjusts itself to minimize the gap between its prediction ŷ = f(X) and the "
+     "true y. 'Supervised' simply means every training example carries the correct answer (the label).")
+
+H3("Why Gradient Boosting (XGBoost / LightGBM)")
+para("A single decision tree asks a series of yes/no questions ('Is lag_1 > $900K?', then "
+     "'Is housing_new_share > 5%?') and lands each store-week in a leaf with a predicted value. "
+     "One tree is weak — it either oversimplifies or overfits. Gradient boosting fixes this by "
+     "building an ENSEMBLE sequentially:")
+bullet("Tree 1 makes a rough prediction. We measure its error for every row (the residual = actual − predicted).")
+bullet("Tree 2 is trained NOT on sales, but on Tree 1's residuals — it learns to predict 'where Tree 1 was wrong'.")
+bullet("Tree 3 corrects what Tree 1+2 still get wrong, and so on for 500 trees.")
+bullet("Final prediction = Tree 1 + 0.05×Tree 2 + 0.05×Tree 3 + … (the 0.05 is the learning rate — small steps avoid overshooting).")
+para("Formally, at each step m the model adds the tree h_m that best reduces the loss L: "
+     "F_m(x) = F_{m-1}(x) + ν · h_m(x), where h_m is fit to the negative gradient of L with "
+     "respect to F_{m-1} (hence 'gradient' boosting). With squared-error loss the negative "
+     "gradient is exactly the residual, which is why the intuition above is precise, not just "
+     "an analogy.")
+para("Why it beats a linear model here: sales depend on INTERACTIONS — e.g., high income matters "
+     "more in a fast-growing housing market with low competition. Trees capture these "
+     "'if-and-and' combinations automatically; a linear model would need every interaction "
+     "term specified by hand.")
+
+H3("Why XGBoost over LightGBM (both gradient boosting)")
+para("XGBoost grows each tree level-by-level (all nodes at a depth split before going deeper) and "
+     "adds an explicit regularization term (γ, λ) penalizing tree complexity. LightGBM grows "
+     "leaf-by-leaf (always split the leaf with the biggest loss gain) — faster, but slightly more "
+     "prone to overfitting on smaller signals. On our holdout XGBoost edged ahead on WAPE and "
+     "bias, so it is the production choice; LightGBM's near-identical score is our robustness check.")
+
+H3("Why Ridge as the linear control")
+para("Ordinary linear regression becomes unstable when inputs are correlated (our lag features "
+     "are highly correlated with each other). Ridge adds an L2 penalty λ·Σβ² to the loss, which "
+     "shrinks coefficients toward zero and stabilizes them. It answers the question: 'Is the "
+     "expensive non-linear model actually necessary?' Ridge reaching 7.11% tells us lags make the "
+     "problem nearly linear, but XGBoost's edge confirms the market interactions are real and worth modeling.")
+
+H3("Why WAPE as the headline metric")
+para("WAPE = Σ|actual − predicted| / Σ(actual). Unlike MAPE, it weights each error by sales "
+     "volume, so a $1K miss at a $50M store does not count the same as a $1K miss at a $1M store "
+     "— exactly how a planner thinks about dollar risk. Bias = (Σpred − Σactual)/Σactual measures "
+     "systematic direction (does the model habitually over- or under-commit?). R² measures the "
+     "share of sales variation explained. We require all three to pass, not just one.")
+
 H3("Head-to-Head Comparison (Holdout Set)")
 comp = pd.read_csv("outputs/model_comparison.csv", index_col=0)
 rows = []
