@@ -518,22 +518,21 @@ if len(loop) > 0 and "Plan_Total" in loop.columns:
             st.info(f"➖ **Tie:** Both methods are within ~{max(abs(plan_err), abs(model_err)):.1f}% of actual. Either is usable for this store.")
 
     # ── 🤖 Per-store GenAI explanation ────────────────────────
-    st.markdown("##### 🤖 Why did this store get this target?")
-
     feats_df = load_store_features()
     feat_row = feats_df[feats_df["Store ID"] == selected_store].iloc[0] if not feats_df.empty and (feats_df["Store ID"] == selected_store).any() else None
 
     if "explanations" not in st.session_state:
         st.session_state["explanations"] = {}
 
-    bc1, bc2 = st.columns([1, 4])
-    with bc1:
-        explain_clicked = st.button("✨ Explain this store", type="primary", use_container_width=True)
-    with bc2:
-        if selected_store in st.session_state["explanations"]:
-            if st.button("🔄 Regenerate", use_container_width=False):
-                st.session_state["explanations"].pop(selected_store, None)
-                explain_clicked = True
+    bc_btn, bc_label = st.columns([1, 6], vertical_alignment="center")
+    with bc_btn:
+        explain_clicked = st.button("Explain", type="primary", use_container_width=True)
+    with bc_label:
+        st.markdown("##### 🤖 Why did this store get this target?")
+    if selected_store in st.session_state["explanations"]:
+        if st.button("🔄 Regenerate", use_container_width=False):
+            st.session_state["explanations"].pop(selected_store, None)
+            explain_clicked = True
 
     if explain_clicked and feat_row is not None:
         with st.spinner("Reading the 16 feature values for this store…"):
