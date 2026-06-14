@@ -87,6 +87,11 @@ st.markdown("""
 
     .crit-pass { color:#2e7d32; font-weight:700; }
     div[data-testid="stDataFrame"] { border-radius: 10px; overflow: hidden; }
+
+    /* Hide Streamlit's default top-right toolbar icons (Star / Edit / GitHub) for a clean demo */
+    [data-testid="stToolbar"], #MainMenu, footer { visibility: hidden !important; height: 0 !important; }
+    [data-testid="stHeader"] { background: transparent; }
+    [data-testid="stDecoration"] { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
 

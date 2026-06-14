@@ -7,3 +7,12 @@ font = "sans serif"
 
 [server]
 headless = true
+
+[client]
+# Hide the Star / Fork / GitHub source-code icons in the top-right toolbar
+# for the deployed app — keeps the demo focused and unbranded.
+toolbarMode = "minimal"
+showErrorDetails = false
+
+[browser]
+gatherUsageStats = false
