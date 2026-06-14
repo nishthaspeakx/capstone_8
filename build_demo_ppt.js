@@ -209,37 +209,50 @@ roles.forEach((r, i) => {
 footer(s);
 
 // ═══════════════════════════════════════════════════════
-// SLIDE 7 — LIVE DEMO
+// SLIDE 7 — REFLECTIONS & NEXT STEPS
 // ═══════════════════════════════════════════════════════
-s = p.addSlide(); s.background = { color: NAVY };
-s.addShape(p.shapes.RECTANGLE, { x: 0, y: 0, w: W, h: 0.18, fill: { color: ACCENT } });
-s.addText("LIVE DEMO", { x: 0.6, y: 0.55, w: 9, h: 0.4, fontSize: 13, color: ACCENT, bold: true, charSpacing: 4, margin: 0 });
-s.addText("Time to see how we implemented it", { x: 0.6, y: 1.05, w: 12.1, h: 1.0, fontSize: 38, color: WHITE, bold: true, fontFace: "Georgia", margin: 0 });
+s = p.addSlide(); s.background = { color: PAPER };
+kicker(s, "Reflections"); title(s, "What worked, what's honest, what's next");
 
-card(s, 0.6, 2.35, 12.1, 4.0, NAVY2);
-s.addText("Interactive Streamlit App", { x: 1.0, y: 2.55, w: 11, h: 0.5, fontSize: 18, color: ACCENT, bold: true, margin: 0 });
+// What worked well
+card(s, 0.6, 1.95, 4.05, 4.85);
+s.addShape(p.shapes.RECTANGLE, { x: 0.6, y: 1.95, w: 4.05, h: 0.55, fill: { color: GREEN } });
+s.addText("What worked well", { x: 0.8, y: 1.95, w: 3.85, h: 0.55, fontSize: 14, color: WHITE, bold: true, valign: "middle", margin: 0 });
+s.addText([
+  "Leakage-safe lag features turned a hard problem tractable",
+  "Trimming to 16 features improved bias AND explainability",
+  "Store-Level Accuracy Loop — the real business differentiator",
+  "3 model families agreeing at ~7% — robust, not a fluke",
+  "Discipline on leakage (refused Plan Sales USD at corr 0.986)",
+].map(t => ({ text: t, options: { bullet: { code: "2022", color: GREEN }, breakLine: true, paraSpaceAfter: 14 } })),
+  { x: 0.8, y: 2.7, w: 3.7, h: 4.0, fontSize: 11.5, color: INK, valign: "top", margin: 0 });
 
-const demoSections = [
-  ["1", "Hero stat banner", "94.7% headline + 1,727 → 91 workload comparison"],
-  ["2", "Pick-a-Store simulator", "Search any of 1,727 stores → see Actual vs Peanut-butter vs Model"],
-  ["3", "Explain this store", "GenAI-powered per-store explanation using the 16 feature values"],
-  ["4", "Feature importance", "What drives the predictions — recent sales + market signals"],
-  ["5", "Store accuracy loop", "Under / over / well-calibrated tabs · drill-down"],
-  ["6", "Role-of-Store segments", "5 strategic playbooks · pie + table"],
-];
-demoSections.forEach((d, i) => {
-  const col = i % 2, row = Math.floor(i / 2);
-  const x = 1.0 + col * 5.85, y = 3.15 + row * 0.95;
-  s.addShape(p.shapes.OVAL, { x, y: y + 0.05, w: 0.5, h: 0.5, fill: { color: ACCENT } });
-  s.addText(d[0], { x, y: y + 0.05, w: 0.5, h: 0.5, fontSize: 16, color: NAVY, bold: true, align: "center", valign: "middle", margin: 0 });
-  s.addText(d[1], { x: x + 0.6, y: y + 0.0, w: 5.1, h: 0.35, fontSize: 13, color: WHITE, bold: true, margin: 0 });
-  s.addText(d[2], { x: x + 0.6, y: y + 0.36, w: 5.1, h: 0.45, fontSize: 10.5, color: ICE, margin: 0 });
-});
+// Honest limitations
+card(s, 4.85, 1.95, 4.05, 4.85);
+s.addShape(p.shapes.RECTANGLE, { x: 4.85, y: 1.95, w: 4.05, h: 0.55, fill: { color: ORANGE } });
+s.addText("Honest limitations", { x: 5.05, y: 1.95, w: 3.85, h: 0.55, fontSize: 14, color: WHITE, bold: true, valign: "middle", margin: 0 });
+s.addText([
+  "Lag-driven — strong for existing stores, not for new ones",
+  "Week-ahead scoring (no recursive multi-week forecasting yet)",
+  "Role thresholds are heuristic (quantile-based)",
+  "Demographics are annual snapshots; intra-year shifts missed",
+  "No event / promo calendar integrated yet",
+].map(t => ({ text: t, options: { bullet: { code: "2022", color: ORANGE }, breakLine: true, paraSpaceAfter: 14 } })),
+  { x: 5.05, y: 2.7, w: 3.7, h: 4.0, fontSize: 11.5, color: INK, valign: "top", margin: 0 });
 
-// URL strip
-s.addShape(p.shapes.ROUNDED_RECTANGLE, { x: 0.6, y: 6.55, w: 12.1, h: 0.55, fill: { color: ACCENT }, rectRadius: 0.08 });
-s.addText("🌐  https://storewisetarget.streamlit.app   |   localhost:8501", { x: 0.6, y: 6.55, w: 12.1, h: 0.55, fontSize: 14, color: NAVY, bold: true, align: "center", valign: "middle", margin: 0 });
-N++; // dark slide, manual counter
+// Next steps
+card(s, 9.1, 1.95, 3.65, 4.85);
+s.addShape(p.shapes.RECTANGLE, { x: 9.1, y: 1.95, w: 3.65, h: 0.55, fill: { color: BLUE } });
+s.addText("What's next", { x: 9.3, y: 1.95, w: 3.45, h: 0.55, fontSize: 14, color: WHITE, bold: true, valign: "middle", margin: 0 });
+s.addText([
+  "Recursive multi-week forecasting for full-year targets",
+  "Cold-start model for new stores (no lag history)",
+  "Constrained optimization → store sums equal division plan",
+  "Pilot West Division → measure override drop → scale",
+].map(t => ({ text: t, options: { bullet: { code: "2022", color: BLUE }, breakLine: true, paraSpaceAfter: 14 } })),
+  { x: 9.3, y: 2.7, w: 3.35, h: 4.0, fontSize: 11.5, color: INK, valign: "top", margin: 0 });
+
+footer(s);
 
 // ═══════════════════════════════════════════════════════
 // SLIDE 8 — THANK YOU / Q&A
