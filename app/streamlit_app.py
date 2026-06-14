@@ -117,6 +117,180 @@ def load_model():
     return None
 
 
+@st.cache_data
+def load_store_features():
+    """Per-store representative feature values for the GenAI explainer."""
+    p = os.path.join(OUTPUTS_DIR, "store_feature_values.csv")
+    if os.path.exists(p):
+        return pd.read_csv(p)
+    return pd.DataFrame()
+
+
+def deterministic_store_explanation(store_id, store_row, feat_row):
+    """
+    Fallback explainer — writes a natural 3-part explanation directly from the
+    16 feature values. Used when Gemini is unavailable (quota, network, no key).
+    Guarantees the demo never fails on screen.
+    """
+    sname = store_row.get("Store Name", "")
+    div = store_row.get("Division", "")
+    actual = store_row["Actual_Total"]
+    pred = store_row["Predicted_Total"]
+    plan = store_row.get("Plan_Total")
+    bias = store_row["Bias_pct"]
+    role = store_row.get("role_of_store", "—")
+    status = store_row.get("target_status", "—")
+
+    lag1 = feat_row.get("lag_1", 0)
+    lag52 = feat_row.get("lag_52", 0)
+    mhi = feat_row.get("CYE Median Household Income", 0)
+    new_share = feat_row.get("housing_new_share", 0)
+    old_share = feat_row.get("housing_old_share", 0)
+    affluent = feat_row.get("income_affluent", 0)
+    sister = feat_row.get("Sister Store Count in TradeArea", 0)
+    total_comp = feat_row.get("total_competitor_ta", 0)
+    urb = feat_row.get("Urbanicity", "this market")
+
+    # — Part 1: why this target —
+    yoy = (lag1 - lag52) / lag52 * 100 if lag52 else 0
+    direction = "above" if yoy > 0 else "below"
+    p1 = (
+        f"The model's target of **${pred/1e6:.2f}M** is anchored to {sname}'s recent run-rate: "
+        f"its most recent weekly sales were **${lag1:,.0f}**, "
+        f"{abs(yoy):.1f}% {direction} the same week a year ago (**${lag52:,.0f}**). "
+    )
+    # secondary driver
+    if new_share > 8 or affluent > 15:
+        p1 += f"The model lifted the target further because the trade area has {new_share:.1f}% post-2000 housing and {affluent:.1f}% high-income (\\$150K+) households — both signals of strong renovation/Pro demand."
+    elif total_comp > 30:
+        p1 += f"The model held the target back because the trade area has {total_comp:.0f} competitors, dampening achievable share."
+    elif old_share > 25:
+        p1 += f"The model factored in the {old_share:.1f}% pre-1969 housing stock — a steady source of repair-and-maintenance demand."
+    else:
+        p1 += f"Median household income of ${mhi:,.0f} and {total_comp:.0f} total competitors round out the market profile."
+
+    # — Part 2: why this segment —
+    role_logic = {
+        "High Growth": f"strong growth signals (HH growth, new housing {new_share:.1f}%) combined with the store outperforming the model's market-only expectation",
+        "Growth": f"moderately positive market signals (income {affluent:.1f}% affluent, new housing {new_share:.1f}%) with the store running ahead of pace",
+        "Neutral": f"a balanced profile — neither aggressive growth markers nor heavy competitive pressure ({total_comp:.0f} competitors)",
+        "Maintain": f"steady demand from {old_share:.1f}% older housing stock with moderate competitive pressure ({total_comp:.0f} competitors)",
+        "Defend": f"high competitive intensity ({total_comp:.0f} competitors, {sister:.0f} sister Lowe's) combined with the store underperforming the market potential",
+    }
+    p2 = f"**Segment: {role}.** This store landed here because of " + role_logic.get(role, f"a mix of {urb} urbanicity and the bias signal ({bias:+.1f}%)") + "."
+
+    # — Part 3: planner action —
+    if status == "Well-Calibrated":
+        p3 = f"**Action: trust the target.** Bias is {bias:+.2f}% — well inside the ±5% acceptance band. No override needed."
+    elif status == "Under-Targeted":
+        if pd.notna(plan) and plan > actual:
+            p3 = f"**Action: raise the target.** Model under-predicts by {abs(bias):.1f}% — the store is sandbagged. Apply +{abs(bias):.0f}% to {abs(bias)+2:.0f}% directional override."
+        else:
+            p3 = f"**Action: raise the target.** Model under-predicts by {abs(bias):.1f}% — apply a directional override after planner reviews the root cause."
+    elif status == "Over-Targeted":
+        p3 = f"**Action: review for headwinds.** Model over-predicts by {bias:.1f}% — investigate competitor moves, mix changes, or local events before accepting the number."
+    else:
+        p3 = f"**Action:** review per the {role} playbook."
+
+    text = (
+        f"**1. Why this target?**\n\n{p1}\n\n"
+        f"**2. Why this segment ({role})?**\n\n{p2}\n\n"
+        f"**3. Planner action**\n\n{p3}"
+    )
+    return text
+
+
+def gemini_store_explanation(store_id, store_row, feat_row):
+    """Ask Gemini why this store got its specific target — uses the 16 feature values."""
+    try:
+        import google.generativeai as genai
+        key = None
+        if hasattr(st, "secrets") and "GEMINI_API_KEY" in st.secrets:
+            key = st.secrets["GEMINI_API_KEY"]
+        elif os.environ.get("GEMINI_API_KEY"):
+            key = os.environ["GEMINI_API_KEY"]
+        if not key:
+            return None, "no_key"
+        genai.configure(api_key=key)
+        model = genai.GenerativeModel("gemini-2.0-flash")
+
+        sname = store_row.get("Store Name", "")
+        div = store_row.get("Division", "")
+        actual = store_row["Actual_Total"]
+        pred = store_row["Predicted_Total"]
+        plan = store_row.get("Plan_Total")
+        bias = store_row["Bias_pct"]
+        role = store_row.get("role_of_store", "—")
+        status = store_row.get("target_status", "—")
+
+        # Build feature snapshot
+        def fmt(v, kind="num"):
+            if pd.isna(v): return "n/a"
+            if kind == "$": return f"${v:,.0f}"
+            if kind == "%": return f"{v:.1f}%"
+            return f"{v:,.0f}" if abs(v) >= 100 else f"{v:.2f}"
+
+        feat_block = f"""
+LAG / MOMENTUM (recent sales history):
+  • lag_1 (last week)        = {fmt(feat_row.get('lag_1'), '$')}
+  • lag_4 (4 weeks ago)      = {fmt(feat_row.get('lag_4'), '$')}
+  • lag_13 (quarter ago)     = {fmt(feat_row.get('lag_13'), '$')}
+  • lag_52 (same week last year) = {fmt(feat_row.get('lag_52'), '$')}
+
+STORE / LOCATION:
+  • Urbanicity tier (0=Remote, 6=Metropolis) = {fmt(feat_row.get('Urbanicity_enc'))}  (raw: {feat_row.get('Urbanicity', 'n/a')})
+
+DEMAND / MARKET:
+  • Total Households in trade area = {fmt(feat_row.get('CYE Total Households'))}
+  • Household Density / sq mi      = {fmt(feat_row.get('CYE Household Density HH SqMi'))}
+  • Median Household Income        = {fmt(feat_row.get('CYE Median Household Income'), '$')}
+  • Total Housing Units            = {fmt(feat_row.get('CYE Total Housing Units'))}
+  • Total Population               = {fmt(feat_row.get('CYE Total Population'))}
+
+ENGINEERED MARKET FEATURES:
+  • income_affluent ($150K+ HH share)  = {fmt(feat_row.get('income_affluent'), '%')}
+  • housing_new_share (post-2000)      = {fmt(feat_row.get('housing_new_share'), '%')}
+  • housing_old_share (pre-1969)       = {fmt(feat_row.get('housing_old_share'), '%')}
+
+COMPETITION:
+  • Sister Store Count in trade area    = {fmt(feat_row.get('Sister Store Count in TradeArea'))}
+  • Total competitor count (all 17)     = {fmt(feat_row.get('total_competitor_ta'))}
+  • Wallflowers Depot (top competitor)  = {fmt(feat_row.get('Wallflowers Depot Count in TradeArea'))}
+"""
+
+        prompt = f"""You are a retail-analytics advisor explaining an XGBoost sales-target prediction to a Lowe's planner. The model uses these 16 features (and no others). Be concrete, reference the actual numbers, and avoid jargon.
+
+STORE:  {store_id}  ·  {sname}  ·  {div} Division  ·  Role: {role}
+PERIOD: 13 weeks of Q4 FY2025
+
+OUTCOMES:
+  • Actual sales         = ${actual:,.0f}
+  • Our model target     = ${pred:,.0f}   (bias {bias:+.2f}%)
+  • Peanut-butter target = ${plan:,.0f}{'' if pd.isna(plan) else f' (off {(plan-actual)/actual*100:+.1f}%)'}
+  • Calibration status   = {status}
+
+FEATURE SNAPSHOT (most recent holdout week):
+{feat_block}
+
+Write a clear 3-part explanation (use the exact headings):
+
+**1. Why this target?**
+In 2-3 sentences, explain which feature values pushed the target up or down. Lead with the strongest signals (the lag values usually). Reference at least 2 specific numbers from the snapshot above.
+
+**2. Why this segment ({role})?**
+1-2 sentences on why the growth/risk signals put this store here. Mention housing_new_share, income_affluent, and total competitors as relevant.
+
+**3. Planner action**
+One concrete sentence: trust the target, raise it, lower it, or flag for review — based on the calibration status and segment.
+
+Total under 140 words. Direct, professional, no fluff."""
+
+        resp = model.generate_content(prompt)
+        return resp.text, None
+    except Exception as e:
+        return None, str(e)
+
+
 def score_uploaded_csv(uploaded_file):
     from feature_engineering import build_phase1_features, PHASE1_FEATURES, TARGET
     from store_accuracy_loop import run_store_accuracy_loop, assign_role_of_store
@@ -353,6 +527,92 @@ if len(loop) > 0 and "Plan_Total" in loop.columns:
             st.warning(f"⚠️ **Plan wins on this one:** Off by {abs(plan_err):.1f}% vs our model's {abs(model_err):.1f}%. This store is one of ~91 that need planner review.")
         else:
             st.info(f"➖ **Tie:** Both methods are within ~{max(abs(plan_err), abs(model_err)):.1f}% of actual. Either is usable for this store.")
+
+    # ── 🤖 Per-store GenAI explanation ────────────────────────
+    st.markdown("##### 🤖 Why did this store get this target?")
+    st.caption("Click below — Gemini will explain in plain English which of the 16 features drove the model's decision for **this specific store**.")
+
+    feats_df = load_store_features()
+    feat_row = feats_df[feats_df["Store ID"] == selected_store].iloc[0] if not feats_df.empty and (feats_df["Store ID"] == selected_store).any() else None
+
+    if "explanations" not in st.session_state:
+        st.session_state["explanations"] = {}
+
+    bc1, bc2 = st.columns([1, 4])
+    with bc1:
+        explain_clicked = st.button("✨ Explain this store", type="primary", use_container_width=True)
+    with bc2:
+        if selected_store in st.session_state["explanations"]:
+            if st.button("🔄 Regenerate", use_container_width=False):
+                st.session_state["explanations"].pop(selected_store, None)
+                explain_clicked = True
+
+    if explain_clicked and feat_row is not None:
+        with st.spinner("Reading the 16 feature values for this store…"):
+            text, err = gemini_store_explanation(selected_store, row, feat_row)
+            if text:
+                st.session_state["explanations"][selected_store] = (text, "gemini")
+            else:
+                # Seamless fallback — deterministic explainer keyed off the same feature values
+                det = deterministic_store_explanation(selected_store, row, feat_row)
+                st.session_state["explanations"][selected_store] = (det, "fallback")
+
+    if selected_store in st.session_state["explanations"]:
+        text, src = st.session_state["explanations"][selected_store]
+        bar_color = "#6f42c1" if src == "gemini" else "#0277bd"
+        attribution = ("Generated by Gemini 2.0 Flash" if src == "gemini"
+                       else "Rule-based explainer (Gemini quota unavailable — same feature values, deterministic logic)")
+        # Convert markdown bold to HTML
+        import re as _re
+        html_text = _re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text).replace("\n", "<br>")
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #f8fafc 0%, #eef2f7 100%);
+                    border-left: 5px solid {bar_color}; border-radius: 10px; padding: 20px 24px;
+                    margin-top: 12px; font-size: 14.5px; line-height: 1.65; color: #1a2332;">
+            {html_text}
+        </div>
+        <div style="font-size:11px; color:#94a3b8; margin-top:6px; font-style:italic;">
+            {attribution} · based on this store's 16 feature values from the most recent holdout week
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Feature snapshot expander — always available
+    if feat_row is not None:
+        with st.expander("🔬 See the actual 16 feature values for this store"):
+            fc1, fc2 = st.columns(2)
+            with fc1:
+                st.markdown("**Lag / Momentum (recent sales)**")
+                st.write({
+                    "lag_1 (last week)": f"${feat_row['lag_1']:,.0f}",
+                    "lag_4 (4 wks ago)": f"${feat_row['lag_4']:,.0f}",
+                    "lag_13 (quarter)": f"${feat_row['lag_13']:,.0f}",
+                    "lag_52 (year ago)": f"${feat_row['lag_52']:,.0f}",
+                })
+                st.markdown("**Store / Location**")
+                st.write({
+                    "Urbanicity": feat_row.get("Urbanicity", "n/a"),
+                })
+                st.markdown("**Competition**")
+                st.write({
+                    "Sister Stores": f"{feat_row['Sister Store Count in TradeArea']:.0f}",
+                    "Total Competitors": f"{feat_row['total_competitor_ta']:.0f}",
+                    "Wallflowers Depot": f"{feat_row['Wallflowers Depot Count in TradeArea']:.0f}",
+                })
+            with fc2:
+                st.markdown("**Demand / Market**")
+                st.write({
+                    "Total Households": f"{feat_row['CYE Total Households']:,.0f}",
+                    "Density / sq mi": f"{feat_row['CYE Household Density HH SqMi']:,.0f}",
+                    "Median Income": f"${feat_row['CYE Median Household Income']:,.0f}",
+                    "Total Housing Units": f"{feat_row['CYE Total Housing Units']:,.0f}",
+                    "Total Population": f"{feat_row['CYE Total Population']:,.0f}",
+                })
+                st.markdown("**Engineered Market**")
+                st.write({
+                    "income_affluent": f"{feat_row['income_affluent']:.1f}%",
+                    "housing_new_share": f"{feat_row['housing_new_share']:.1f}%",
+                    "housing_old_share": f"{feat_row['housing_old_share']:.1f}%",
+                })
 
     st.markdown("---")
 
