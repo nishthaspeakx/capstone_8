@@ -101,6 +101,10 @@ def load_precomputed():
         p = os.path.join(OUTPUTS_DIR, fname)
         if os.path.exists(p):
             data[key] = pd.read_csv(p, index_col=0 if key == "comparison" else None)
+    # If we have the baseline-enriched store loop, prefer it
+    enriched_p = os.path.join(OUTPUTS_DIR, "store_accuracy_loop_with_baseline.csv")
+    if os.path.exists(enriched_p):
+        data["store_loop"] = pd.read_csv(enriched_p)
     return data
 
 
@@ -241,6 +245,117 @@ else:
     Use the sidebar (left) to upload and score a new file.
     </div>
     """, unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+# ⭐ HERO STAT BANNER  (Improvement #1)
+# ═══════════════════════════════════════════════════════════════
+if len(loop) > 0:
+    n_ok = (loop["target_status"] == "Well-Calibrated").sum()
+    n_review = len(loop) - n_ok
+    hero_pct = n_ok / len(loop) * 100
+    st.markdown(f"""
+    <div style="background: linear-gradient(135deg, #003087 0%, #0277bd 100%); color: white;
+                padding: 32px 40px; border-radius: 16px; margin: 14px 0 26px 0;
+                box-shadow: 0 8px 24px rgba(0,48,135,0.20); text-align: center;">
+        <div style="font-size: 60px; font-weight: 800; color: #FFD54F; line-height: 1; letter-spacing: -1px;">
+            {hero_pct:.1f}%
+        </div>
+        <div style="font-size: 19px; margin-top: 12px; font-weight: 600; opacity: 0.95;">
+            of stores get an accurate sales target (within ±5%) from the new model
+        </div>
+        <div style="font-size: 14px; margin-top: 8px; opacity: 0.80;">
+            Override workload drops from <b>1,727 stores</b> (every cycle, today) to <b>only {n_review} stores</b> needing planner review — a <b>{(1 - n_review/len(loop))*100:.0f}% reduction</b>.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 🔍 PICK-A-STORE SIMULATOR  (Improvement #2 — the wow moment)
+# ═══════════════════════════════════════════════════════════════
+if len(loop) > 0 and "Plan_Total" in loop.columns:
+    st.markdown('<div class="section-h">🔍 &nbsp;·&nbsp; Try It: Pick a Store</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-sub">See how the model compares to the current peanut-butter target — for any store</div>', unsafe_allow_html=True)
+
+    # Pre-curated quick picks (Improvement #3)
+    qc_col1, qc_col2, qc_col3, qc_col4, qc_col5, qc_col6 = st.columns(6)
+    quick_picks = {
+        "Best Save": loop.sort_values("Model_Improvement_pp", ascending=False).iloc[0]["Store ID"],
+        "Worst Miss": loop.sort_values("abs_bias", ascending=False).iloc[0]["Store ID"],
+        "Well-Calibrated": loop[loop["target_status"] == "Well-Calibrated"].sort_values("WAPE_pct").iloc[0]["Store ID"],
+        "High Growth": loop[loop.get("role_of_store") == "High Growth"].iloc[0]["Store ID"] if "role_of_store" in loop.columns else loop.iloc[0]["Store ID"],
+        "Defend": loop[loop.get("role_of_store") == "Defend"].iloc[0]["Store ID"] if "role_of_store" in loop.columns else loop.iloc[5]["Store ID"],
+        "Surprise me": loop.sample(1, random_state=42).iloc[0]["Store ID"],
+    }
+    if "demo_store" not in st.session_state:
+        st.session_state["demo_store"] = quick_picks["Best Save"]
+
+    cols = [qc_col1, qc_col2, qc_col3, qc_col4, qc_col5, qc_col6]
+    for c, (label, sid) in zip(cols, quick_picks.items()):
+        if c.button(label, use_container_width=True):
+            st.session_state["demo_store"] = sid
+
+    store_ids = loop["Store ID"].tolist()
+    default_idx = store_ids.index(st.session_state["demo_store"]) if st.session_state["demo_store"] in store_ids else 0
+    selected_store = st.selectbox("…or pick any of 1,727 stores", store_ids, index=default_idx, key="sim_select")
+    st.session_state["demo_store"] = selected_store
+
+    row = loop[loop["Store ID"] == selected_store].iloc[0]
+    actual = row["Actual_Total"]
+    plan = row.get("Plan_Total")
+    pred = row["Predicted_Total"]
+    plan_err = (plan - actual) / actual * 100 if pd.notna(plan) else None
+    model_err = row["Bias_pct"]
+
+    sname = row.get("Store Name", "")
+    div = row.get("Division", "")
+    role = row.get("role_of_store", "—")
+    st.markdown(f"##### Store **{selected_store}**  ·  {sname}  ·  {div} Division  ·  Role: **{role}**")
+
+    sim1, sim2, sim3 = st.columns(3)
+    with sim1:
+        st.markdown(f"""
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:20px; text-align:center; height:175px;">
+            <div style="font-size:11px; color:#64748b; font-weight:700; letter-spacing:1.5px;">ACTUAL SALES (Q4 FY25)</div>
+            <div style="font-size:36px; color:#003087; font-weight:800; margin-top:14px;">${actual/1e6:.2f}M</div>
+            <div style="font-size:12px; color:#475569; margin-top:8px;">What the store really sold</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with sim2:
+        if pd.notna(plan):
+            err_color = "#c62828" if abs(plan_err) > 5 else "#e65100" if abs(plan_err) > 2 else "#2e7d32"
+            st.markdown(f"""
+            <div style="background:#fff; border:2px solid #e65100; border-radius:14px; padding:20px; text-align:center; height:175px;">
+                <div style="font-size:11px; color:#e65100; font-weight:700; letter-spacing:1.5px;">PEANUT-BUTTER TARGET</div>
+                <div style="font-size:36px; color:#e65100; font-weight:800; margin-top:14px;">${plan/1e6:.2f}M</div>
+                <div style="font-size:14px; color:{err_color}; margin-top:8px; font-weight:700;">{plan_err:+.1f}% vs actual</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    with sim3:
+        err_color = "#c62828" if abs(model_err) > 5 else "#e65100" if abs(model_err) > 2 else "#2e7d32"
+        st.markdown(f"""
+        <div style="background:#fff; border:2px solid #2e7d32; border-radius:14px; padding:20px; text-align:center; height:175px;">
+            <div style="font-size:11px; color:#2e7d32; font-weight:700; letter-spacing:1.5px;">OUR MODEL TARGET</div>
+            <div style="font-size:36px; color:#2e7d32; font-weight:800; margin-top:14px;">${pred/1e6:.2f}M</div>
+            <div style="font-size:14px; color:{err_color}; margin-top:8px; font-weight:700;">{model_err:+.1f}% vs actual</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Verdict callout
+    if pd.notna(plan):
+        improvement = abs(plan_err) - abs(model_err)
+        if improvement > 1:
+            st.success(f"✅ **Model wins:** The peanut-butter target was off by {abs(plan_err):.1f}%; our model is off by {abs(model_err):.1f}% — a **{improvement:.1f} pp improvement** for this store.")
+        elif improvement < -1:
+            st.warning(f"⚠️ **Plan wins on this one:** Off by {abs(plan_err):.1f}% vs our model's {abs(model_err):.1f}%. This store is one of ~91 that need planner review.")
+        else:
+            st.info(f"➖ **Tie:** Both methods are within ~{max(abs(plan_err), abs(model_err)):.1f}% of actual. Either is usable for this store.")
+
+    st.markdown("---")
+
 
 # ═══════════════════════════════════════════════════════════════
 # 1. THE PROBLEM
