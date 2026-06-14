@@ -519,7 +519,6 @@ if len(loop) > 0 and "Plan_Total" in loop.columns:
 
     # ── 🤖 Per-store GenAI explanation ────────────────────────
     st.markdown("##### 🤖 Why did this store get this target?")
-    st.caption("Click below — Gemini will explain in plain English which of the 16 features drove the model's decision for **this specific store**.")
 
     feats_df = load_store_features()
     feat_row = feats_df[feats_df["Store ID"] == selected_store].iloc[0] if not feats_df.empty and (feats_df["Store ID"] == selected_store).any() else None
