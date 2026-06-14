@@ -450,30 +450,19 @@ if len(loop) > 0:
 # ═══════════════════════════════════════════════════════════════
 if len(loop) > 0 and "Plan_Total" in loop.columns:
     st.markdown('<div class="section-h">🔍 &nbsp;·&nbsp; Try It: Pick a Store</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-sub">See how the model compares to the current peanut-butter target — for any store</div>', unsafe_allow_html=True)
-
-    # Pre-curated quick picks (Improvement #3)
-    qc_col1, qc_col2, qc_col3, qc_col4, qc_col5, qc_col6 = st.columns(6)
-    quick_picks = {
-        "Best Save": loop.sort_values("Model_Improvement_pp", ascending=False).iloc[0]["Store ID"],
-        "Worst Miss": loop.sort_values("abs_bias", ascending=False).iloc[0]["Store ID"],
-        "Well-Calibrated": loop[loop["target_status"] == "Well-Calibrated"].sort_values("WAPE_pct").iloc[0]["Store ID"],
-        "High Growth": loop[loop.get("role_of_store") == "High Growth"].iloc[0]["Store ID"] if "role_of_store" in loop.columns else loop.iloc[0]["Store ID"],
-        "Defend": loop[loop.get("role_of_store") == "Defend"].iloc[0]["Store ID"] if "role_of_store" in loop.columns else loop.iloc[5]["Store ID"],
-        "Surprise me": loop.sample(1, random_state=42).iloc[0]["Store ID"],
-    }
-    if "demo_store" not in st.session_state:
-        st.session_state["demo_store"] = quick_picks["Best Save"]
-
-    cols = [qc_col1, qc_col2, qc_col3, qc_col4, qc_col5, qc_col6]
-    for c, (label, sid) in zip(cols, quick_picks.items()):
-        if c.button(label, use_container_width=True):
-            st.session_state["demo_store"] = sid
+    st.markdown('<div class="section-sub">See how the model compares to the current peanut-butter target — for any of the 1,727 stores</div>', unsafe_allow_html=True)
 
     store_ids = loop["Store ID"].tolist()
-    default_idx = store_ids.index(st.session_state["demo_store"]) if st.session_state["demo_store"] in store_ids else 0
-    selected_store = st.selectbox("…or pick any of 1,727 stores", store_ids, index=default_idx, key="sim_select")
-    st.session_state["demo_store"] = selected_store
+    # Build a friendly label "S00100 — Silvercliff, IL (NORTH)"
+    label_for = {sid: f"{sid} — {row['Store Name']} ({row['Division']})"
+                 for sid, row in loop.set_index("Store ID")[["Store Name", "Division"]].iterrows()}
+    selected_store = st.selectbox(
+        "Select a store",
+        store_ids,
+        format_func=lambda sid: label_for.get(sid, sid),
+        key="sim_select",
+        label_visibility="collapsed",
+    )
 
     row = loop[loop["Store ID"] == selected_store].iloc[0]
     actual = row["Actual_Total"]
