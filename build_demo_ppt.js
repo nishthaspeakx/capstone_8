@@ -51,6 +51,12 @@ members.forEach((m, i) => {
 s.addText("github.com/nishthaspeakx/capstone_8", { x: 0.8, y: 7.1, w: 8, h: 0.3, fontSize: 11, color: ICE, italic: true, margin: 0 });
 N++; // title slide doesn't show footer counter
 
+s.addNotes(
+"[~15 sec] Good morning Professor. We are Group 8 — and our capstone is on Lowe's Store-Level AI Sales Targeting. " +
+"Over the next ten minutes, we will walk you through how we replaced their flat 'peanut-butter' planning method with a supervised machine learning model that actually understands local market dynamics. " +
+"We will spend roughly six minutes on the work, and then move into a live demo of the dashboard for the remaining time."
+);
+
 // ═══════════════════════════════════════════════════════
 // SLIDE 2 — THE PROBLEM
 // ═══════════════════════════════════════════════════════
@@ -73,6 +79,14 @@ s.addText("25.83%", { x: 8.5, y: 2.4, w: 4.3, h: 1.5, fontSize: 64, color: ACCEN
 s.addText("of store-weeks miss target\nby more than ±10%\nunder the current method", { x: 8.7, y: 3.95, w: 3.9, h: 1.5, fontSize: 15, color: WHITE, align: "center", lineSpacing: 22 });
 s.addText("1 in 4 store-weeks need re-planning", { x: 8.5, y: 5.6, w: 4.3, h: 0.45, fontSize: 12, color: ICE, align: "center", italic: true });
 footer(s);
+
+s.addNotes(
+"[~50 sec] Lowe's is America's number two home improvement retailer — about 1,727 stores and 85 billion dollars in annual revenue. " +
+"Today, when they set next year's store sales targets, they take the total company plan and divide it across stores using each store's 3-year historical sales share. " +
+"We call this the 'peanut-butter spread' — one flat number smeared across every store. " +
+"The flaw is obvious: a booming new-construction suburb gets the same growth rate as a declining rural town. Demographics, housing age, income, competition — none of it matters. " +
+"The cost? Under the current method, 25.83% of store-weeks miss target by more than ten percent. That is one in four store-weeks. Planners spend the entire year doing manual overrides, store by store."
+);
 
 // ═══════════════════════════════════════════════════════
 // SLIDE 3 — OUR SOLUTION
@@ -116,6 +130,14 @@ s.addText("165 → 40 → 16 features", { x: 7.85, y: 5.85, w: 5.0, h: 0.45, fon
 s.addText("3 iterations · multicollinearity removed · business-relevance trim", { x: 7.85, y: 6.28, w: 5.0, h: 0.4, fontSize: 10, color: NAVY, align: "center", italic: true, margin: 0 });
 footer(s);
 
+s.addNotes(
+"[~55 sec] Our solution is a supervised machine learning model trained on 269,412 store-week records. " +
+"We started with 165 candidate features, narrowed to 40 in Phase 1, and after three modeling iterations landed on the final 16 you see on the left. " +
+"They cover four groups: lag features capturing recent momentum, raw demand variables like households and income, three engineered demand features combining things like income brackets and housing age, and competition plus store attributes. " +
+"The model is XGBoost — gradient boosted trees. We benchmarked it against LightGBM, Ridge regression, and a naive same-week-last-year baseline. " +
+"Two key methodology points: we used a rolling time split — train on the past, test on the future, never random — and we explicitly banned three columns from being used as inputs because they were same-period measures that would leak the answer."
+);
+
 // ═══════════════════════════════════════════════════════
 // SLIDE 4 — RESULTS
 // ═══════════════════════════════════════════════════════
@@ -151,6 +173,16 @@ s.addTable([
      border: { pt: 0.5, color: ICE }, fill: { color: WHITE }, rowH: [0.5, 0.48, 0.48, 0.48, 0.48] });
 footer(s);
 
+s.addNotes(
+"[~50 sec] Every success criterion is met. " +
+"WAPE of 7.05% — well under our 8% target. WAPE means: of every hundred dollars of actual sales, the model misses by about seven dollars. " +
+"Bias of minus 0.97% — essentially zero, comfortably within our plus-or-minus 2% acceptance band. That means the chain plan reconciles cleanly. " +
+"R-squared is 0.977 — the model explains 97.7% of sales variation. " +
+"We beat the naive baseline by 15% — that is the bar every real model must clear. " +
+"Look at the comparison table: all three real models cluster around 7% WAPE, while naive is at 8.27%. That agreement tells us the result is robust, not a fluke. " +
+"The most important number on this slide is 94.7% — the share of stores whose targets land within plus-or-minus 5% of actual. We will unpack that next."
+);
+
 // ═══════════════════════════════════════════════════════
 // SLIDE 5 — STORE ACCURACY LOOP
 // ═══════════════════════════════════════════════════════
@@ -177,6 +209,15 @@ card(s, 0.6, 5.8, 12.1, 1.2, NAVY);
 s.addText("1,727 stores manually reviewed today  →  only 91 stores need attention with our model", { x: 0.6, y: 5.85, w: 12.1, h: 0.55, fontSize: 18, color: WHITE, bold: true, align: "center", margin: 0 });
 s.addText("a ~95% reduction in planner override workload", { x: 0.6, y: 6.4, w: 12.1, h: 0.4, fontSize: 13, color: ACCENT, align: "center", italic: true, margin: 0 });
 footer(s);
+
+s.addNotes(
+"[~55 sec] This is the real differentiator. Instead of trusting one global score that can hide offsetting errors, we compute per-store WAPE and bias, then classify every store. " +
+"1,636 stores — 94.7% — are well-calibrated, meaning their target is within plus-or-minus 5% of actual. Planners can trust these directly. " +
+"Sixty stores are under-targeted: the model predicts too low and the store is essentially sandbagged — planners should raise these targets. " +
+"Thirty-one are over-targeted: the model is too aggressive and the planner needs to investigate headwinds before committing. " +
+"The headline business impact is on the navy strip at the bottom: today, planners manually review all 1,727 stores every cycle. With our model, only 91 need human attention. " +
+"That is a 95% reduction in override workload — and the chain plan still reconciles because bias is near zero."
+);
 
 // ═══════════════════════════════════════════════════════
 // SLIDE 6 — ROLE OF STORE
@@ -207,6 +248,14 @@ roles.forEach((r, i) => {
   s.addText(r[1], { x: 6.45, y: y + 0.5, w: 6.05, h: 0.5, fontSize: 12, color: INK, margin: 0 });
 });
 footer(s);
+
+s.addNotes(
+"[~40 sec] On top of the model we layered a Role-of-Store overlay. Every store falls into one of five strategic segments — High Growth, Growth, Neutral, Maintain, or Defend. " +
+"We derive these from a composite net score that combines household growth, new-housing share, and competitive intensity, then split stores into quintiles. " +
+"The result: about 20% of stores in each segment, each with its own playbook. " +
+"High Growth stores get aggressive targets; Defend stores get conservative ones to protect share. " +
+"This turns a single model into five distinct planning playbooks — giving the planning team a richer toolkit than just one number per store."
+);
 
 // ═══════════════════════════════════════════════════════
 // SLIDE 7 — REFLECTIONS & NEXT STEPS
@@ -254,6 +303,16 @@ s.addText([
 
 footer(s);
 
+s.addNotes(
+"[~45 sec] Three honest reflections to close. " +
+"What worked: our discipline on leakage prevention — we refused to use Plan Sales USD even at a 0.986 correlation, because it would have given us fake accuracy but a useless production model. " +
+"And cutting from 40 features to 16 actually improved bias and made the model far more explainable to planners. " +
+"Honest limitations: the model is lag-driven, so it is strong for existing stores but weak for brand-new ones. " +
+"We do not yet have a full-year recursive forecaster, and demographics are annual snapshots that miss intra-year shifts. " +
+"What is next: a cold-start model for new stores, recursive multi-week forecasting, constrained optimization so store targets sum exactly to the division plan, and a pilot on the West Division to measure override reduction before chain-wide rollout. " +
+"With that — let me move to the live demo."
+);
+
 // ═══════════════════════════════════════════════════════
 // SLIDE 8 — THANK YOU / Q&A
 // ═══════════════════════════════════════════════════════
@@ -274,5 +333,11 @@ close.forEach((c, i) => {
 });
 
 s.addText("IIM Calcutta  ·  Capstone 8  ·  Group 8   |   github.com/nishthaspeakx/capstone_8", { x: 0.8, y: 6.6, w: 12, h: 0.4, fontSize: 12, color: ICE, italic: true, margin: 0 });
+
+s.addNotes(
+"[~15 sec — show this AFTER the live demo] " +
+"To recap — 7.05% WAPE, near-zero bias, 94.7% of stores accurately targeted, and a 95% reduction in planner workload. " +
+"Thank you, Professor. We would love to take your questions."
+);
 
 p.writeFile({ fileName: "outputs/Capstone8_Demo_Deck.pptx" }).then(() => console.log("Demo deck written"));
