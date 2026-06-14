@@ -576,44 +576,6 @@ if len(loop) > 0 and "Plan_Total" in loop.columns:
         </div>
         """, unsafe_allow_html=True)
 
-    # Feature snapshot expander — always available
-    if feat_row is not None:
-        with st.expander("🔬 See the actual 16 feature values for this store"):
-            fc1, fc2 = st.columns(2)
-            with fc1:
-                st.markdown("**Lag / Momentum (recent sales)**")
-                st.write({
-                    "lag_1 (last week)": f"${feat_row['lag_1']:,.0f}",
-                    "lag_4 (4 wks ago)": f"${feat_row['lag_4']:,.0f}",
-                    "lag_13 (quarter)": f"${feat_row['lag_13']:,.0f}",
-                    "lag_52 (year ago)": f"${feat_row['lag_52']:,.0f}",
-                })
-                st.markdown("**Store / Location**")
-                st.write({
-                    "Urbanicity": feat_row.get("Urbanicity", "n/a"),
-                })
-                st.markdown("**Competition**")
-                st.write({
-                    "Sister Stores": f"{feat_row['Sister Store Count in TradeArea']:.0f}",
-                    "Total Competitors": f"{feat_row['total_competitor_ta']:.0f}",
-                    "Wallflowers Depot": f"{feat_row['Wallflowers Depot Count in TradeArea']:.0f}",
-                })
-            with fc2:
-                st.markdown("**Demand / Market**")
-                st.write({
-                    "Total Households": f"{feat_row['CYE Total Households']:,.0f}",
-                    "Density / sq mi": f"{feat_row['CYE Household Density HH SqMi']:,.0f}",
-                    "Median Income": f"${feat_row['CYE Median Household Income']:,.0f}",
-                    "Total Housing Units": f"{feat_row['CYE Total Housing Units']:,.0f}",
-                    "Total Population": f"{feat_row['CYE Total Population']:,.0f}",
-                })
-                st.markdown("**Engineered Market**")
-                st.write({
-                    "income_affluent": f"{feat_row['income_affluent']:.1f}%",
-                    "housing_new_share": f"{feat_row['housing_new_share']:.1f}%",
-                    "housing_old_share": f"{feat_row['housing_old_share']:.1f}%",
-                })
-
     st.markdown("---")
 
 
