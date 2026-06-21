@@ -512,7 +512,7 @@ if len(loop) > 0 and "Plan_Total" in loop.columns:
         </div>
         """, unsafe_allow_html=True)
 
-    # Verdict callout
+    # Verdict callout — comparing model vs peanut-butter for this store
     if pd.notna(plan):
         improvement = abs(plan_err) - abs(model_err)
         if improvement > 1:
@@ -521,6 +521,35 @@ if len(loop) > 0 and "Plan_Total" in loop.columns:
             st.warning(f"⚠️ **Plan wins on this one:** Off by {abs(plan_err):.1f}% vs our model's {abs(model_err):.1f}%. This store is one of ~91 that need planner review.")
         else:
             st.info(f"➖ **Tie:** Both methods are within ~{max(abs(plan_err), abs(model_err)):.1f}% of actual. Either is usable for this store.")
+
+    # ── 🚩 Calibration flag — does this store make the 91-store review list? ──
+    status_now = row.get("target_status", "—")
+    if status_now == "Well-Calibrated":
+        st.markdown(f"""
+        <div style="background:#e8f5e9; border-left:5px solid #2e7d32; border-radius:8px;
+                    padding:14px 18px; margin-top:10px; font-size:14px; color:#1a2332;">
+            🟢 <b>Well-Calibrated</b> — bias is {model_err:+.1f}%, within the planner's ±5% acceptance band.
+            <b>This store is NOT on the 91-store review list.</b> Planner can trust the target as-is.
+        </div>
+        """, unsafe_allow_html=True)
+    elif status_now == "Under-Targeted":
+        st.markdown(f"""
+        <div style="background:#fff3e0; border-left:5px solid #e65100; border-radius:8px;
+                    padding:14px 18px; margin-top:10px; font-size:14px; color:#1a2332;">
+            🟠 <b>FLAGGED — Under-Targeted</b> · Model predicts {abs(model_err):.1f}% lower than actual.
+            <b>This store IS on the 91-store review list.</b> Planner should consider raising the target —
+            the store outperformed (sandbagged signal).
+        </div>
+        """, unsafe_allow_html=True)
+    elif status_now == "Over-Targeted":
+        st.markdown(f"""
+        <div style="background:#ffebee; border-left:5px solid #c62828; border-radius:8px;
+                    padding:14px 18px; margin-top:10px; font-size:14px; color:#1a2332;">
+            🔴 <b>FLAGGED — Over-Targeted</b> · Model predicts {model_err:+.1f}% higher than actual.
+            <b>This store IS on the 91-store review list.</b> Planner should investigate headwinds
+            (new competitor, local economic shock, etc.) before accepting the model's number.
+        </div>
+        """, unsafe_allow_html=True)
 
     # ── 🤖 Per-store GenAI explanation ────────────────────────
     feats_df = load_store_features()
