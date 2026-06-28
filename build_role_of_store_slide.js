@@ -22,26 +22,16 @@ s.addText("SECTION 06 · RESULTS", { x: 0.6, y: 0.42, w: 9, h: 0.32, fontSize: 1
 s.addText("Role-of-Store — one model, five planning playbooks", { x: 0.6, y: 0.78, w: 12.1, h: 0.95, fontSize: 30, color: NAVY, bold: true, fontFace: "Georgia", margin: 0 });
 s.addText("Every store gets a planning role based on growth signals + model bias", { x: 0.6, y: 1.65, w: 12.1, h: 0.4, fontSize: 14, color: MUTE, italic: true, margin: 0 });
 
-// ── LEFT: Donut chart (5 equal segments) ─────────────────────
-s.addChart(p.charts.DOUGHNUT,
-  [{
-    name: "Roles",
-    labels: ["High Growth", "Growth", "Neutral", "Maintain", "Defend"],
-    values: [346, 345, 345, 346, 345],
-  }],
-  {
-    x: 0.4, y: 2.2, w: 5.6, h: 4.8,
-    chartColors: ["1565C0", "43A047", "757575", "FF8F00", "C62828"],
-    showLegend: true, legendPos: "b", legendColor: INK, legendFontSize: 11,
-    dataLabelColor: WHITE, dataLabelFontSize: 12, dataLabelFontBold: true,
-    showValue: false, showPercent: true,
-    holeSize: 55,
-  }
-);
+// ── LEFT: Donut chart embedded as image (matches reference exactly) ─────────
+s.addImage({
+  path: "outputs/role_donut_reference.png",
+  x: 0.5, y: 1.9, w: 5.6, h: 5.0,
+  sizing: { type: "contain", w: 5.6, h: 5.0 }
+});
 
 // Small caption under the donut
 s.addText("1,727 stores · ~20% each — quantile-based segmentation", {
-  x: 0.4, y: 6.9, w: 5.6, h: 0.3, fontSize: 10, color: MUTE, italic: true, align: "center", margin: 0
+  x: 0.4, y: 6.95, w: 5.8, h: 0.3, fontSize: 10, color: MUTE, italic: true, align: "center", margin: 0
 });
 
 // ── RIGHT: 5 separate role cards ────────────────────────────
