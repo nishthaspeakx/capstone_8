@@ -814,10 +814,23 @@ if len(loop) > 0 and "role_of_store" in loop.columns:
     with rc1:
         vc = loop["role_of_store"].value_counts()
         fig_p = px.pie(values=[vc.get(r, 0) for r in order], names=order, color=order,
-                       color_discrete_map=colors, hole=0.45)
-        fig_p.update_layout(height=340, margin=dict(t=10, b=10),
-                            legend=dict(orientation="h", y=-0.15))
-        st.plotly_chart(fig_p, use_container_width=True)
+                       color_discrete_map=colors, hole=0.5)
+        fig_p.update_traces(
+            textposition='inside', textinfo='percent',
+            textfont=dict(size=14, color='white', family='Inter'),
+            marker=dict(line=dict(color='#f4f7fb', width=3)),
+        )
+        # Force perfect-circle aspect: square layout
+        fig_p.update_layout(
+            height=420, width=420,
+            margin=dict(t=10, b=70, l=10, r=10),
+            showlegend=True,
+            legend=dict(orientation="h", y=-0.05, x=0.5, xanchor='center',
+                        font=dict(size=12, color='#1a2332')),
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+        )
+        st.plotly_chart(fig_p, use_container_width=False)
     with rc2:
         rs = loop.groupby("role_of_store").agg(
             Stores=("Store ID", "count"), Median_WAPE=("WAPE_pct", "median"),
