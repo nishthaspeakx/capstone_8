@@ -461,32 +461,37 @@ if len(loop) > 0 and "Plan_Total" in loop.columns:
     # Build a friendly label "S00100 — Silvercliff, IL (NORTH)"
     label_for = {sid: f"{sid} — {row['Store Name']} ({row['Division']})"
                  for sid, row in loop.set_index("Store ID")[["Store Name", "Division"]].iterrows()}
-    # Case-insensitive lookup of store IDs
-    id_lookup = {sid.upper(): sid for sid in store_ids}
 
     typed = st.text_input(
         "Enter a Store ID",
-        value="S01155" if "S01155" in store_ids else store_ids[0],
-        placeholder="e.g. S01155",
+        value="",
+        placeholder="Type store ID or name, e.g. S01155 or Wolfridge",
         key="sim_input",
         label_visibility="collapsed",
     )
 
-    # Resolve the typed value to a real store ID
-    selected_store = None
-    if typed:
-        key = typed.strip().upper()
-        if key in id_lookup:
-            selected_store = id_lookup[key]
-        else:
-            # Partial match — find any store ID containing the typed text
-            matches = [sid for sid in store_ids if key in sid.upper()]
-            if matches:
-                selected_store = matches[0]
+    # Filter matching stores as user types
+    search = typed.strip().upper()
+    if search:
+        matches = [
+            sid for sid in store_ids
+            if search in sid.upper() or search in label_for.get(sid, "").upper()
+        ]
+    else:
+        matches = store_ids  # show all when empty
 
-    if selected_store is None:
-        st.warning(f"No store found for '{typed}'. Try a valid ID like S01155, S01442, or S00100.")
+    if not matches:
+        st.warning(f"No stores match '{typed}'. Try a store ID like S01155 or a city name.")
         st.stop()
+
+    # Show filtered options in a selectbox below
+    selected_store = st.selectbox(
+        "Matching stores",
+        matches,
+        format_func=lambda sid: label_for.get(sid, sid),
+        key="sim_select",
+        label_visibility="collapsed",
+    )
 
     row = loop[loop["Store ID"] == selected_store].iloc[0]
     actual = row["Actual_Total"]
