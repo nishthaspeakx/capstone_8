@@ -466,36 +466,31 @@ if len(loop) > 0 and "Plan_Total" in loop.columns:
     # Build a friendly label "S00100 — Silvercliff, IL (NORTH)"
     label_for = {sid: f"{sid} — {row['Store Name']} ({row['Division']})"
                  for sid, row in loop.set_index("Store ID")[["Store Name", "Division"]].iterrows()}
-    label_to_id = {v: k for k, v in label_for.items()}
+    id_lookup = {sid.upper(): sid for sid in store_ids}
 
-    if HAS_SEARCHBOX:
-        def search_stores(query: str):
-            q = query.strip().upper()
-            if not q:
-                return [label_for[sid] for sid in store_ids[:50]]
-            return [
-                label_for[sid] for sid in store_ids
-                if q in sid.upper() or q in label_for.get(sid, "").upper()
-            ][:50]
+    col_txt, col_drop = st.columns([1, 2])
+    with col_txt:
+        typed = st.text_input(
+            "Store ID",
+            value="",
+            placeholder="e.g. S01155",
+            key="sim_input",
+        )
+    # Filter dropdown based on typed text
+    search = typed.strip().upper()
+    filtered = [
+        sid for sid in store_ids
+        if search in sid.upper() or search in label_for.get(sid, "").upper()
+    ] if search else store_ids
 
-        result = st_searchbox(
-            search_stores,
-            placeholder="Type store ID or city, e.g. S01155 or Wolfridge",
-            key="sim_searchbox",
-            default=label_for.get("S01155") if "S01155" in store_ids else label_for.get(store_ids[0]),
-        )
-        selected_store = label_to_id.get(result) if result else (
-            "S01155" if "S01155" in store_ids else store_ids[0]
-        )
-    else:
-        default_idx = store_ids.index("S01155") if "S01155" in store_ids else 0
+    default_idx = filtered.index("S01155") if "S01155" in filtered else 0
+    with col_drop:
         selected_store = st.selectbox(
-            "Select a store",
-            store_ids,
+            "Matching stores",
+            filtered,
             index=default_idx,
             format_func=lambda sid: label_for.get(sid, sid),
             key="sim_select",
-            label_visibility="collapsed",
         )
 
     row = loop[loop["Store ID"] == selected_store].iloc[0]
