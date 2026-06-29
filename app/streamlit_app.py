@@ -468,14 +468,13 @@ if len(loop) > 0 and "Plan_Total" in loop.columns:
                  for sid, row in loop.set_index("Store ID")[["Store Name", "Division"]].iterrows()}
     id_lookup = {sid.upper(): sid for sid in store_ids}
 
-    col_txt, col_drop = st.columns([1, 2])
-    with col_txt:
-        typed = st.text_input(
-            "Store ID",
-            value="",
-            placeholder="e.g. S01155",
-            key="sim_input",
-        )
+    typed = st.text_input(
+        "Store ID",
+        value="",
+        placeholder="e.g. S01155",
+        key="sim_input",
+        label_visibility="collapsed",
+    )
     # Filter dropdown based on typed text
     search = typed.strip().upper()
     filtered = [
@@ -484,14 +483,14 @@ if len(loop) > 0 and "Plan_Total" in loop.columns:
     ] if search else store_ids
 
     default_idx = filtered.index("S01155") if "S01155" in filtered else 0
-    with col_drop:
-        selected_store = st.selectbox(
-            "Matching stores",
-            filtered,
-            index=default_idx,
-            format_func=lambda sid: label_for.get(sid, sid),
-            key="sim_select",
-        )
+    selected_store = st.selectbox(
+        "Matching stores",
+        filtered,
+        index=default_idx,
+        format_func=lambda sid: label_for.get(sid, sid),
+        key="sim_select",
+        label_visibility="collapsed",
+    )
 
     row = loop[loop["Store ID"] == selected_store].iloc[0]
     actual = row["Actual_Total"]
